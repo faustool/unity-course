@@ -2,7 +2,6 @@
 using System.Collections;
 
 public class NumberWizard : MonoBehaviour {
-
 	private int max = 1000;
 	private int min = 1;
 	private int currentGuess = 500;
