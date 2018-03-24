@@ -6,107 +6,140 @@ using System.Collections.Generic;
 public class TextController : MonoBehaviour {
 
 	public Text text;
-
-	private State currentState = new CellState();
+	private StateMachine stateMachine;
 
 	// Use this for initialization
 	void Start () {
+		stateMachine = new StateMachine(
+			new State("You are in a prision cell, and you need to escape. There are some dirty sheets on the bed, a mirror on the wall, and the door is locked from the outside.",
+				"Press S to view Sheets, M to view Mirror and L to view Lock.",
+				new Action(KeyCode.M, new State("This is a very simple mirror.", "Press T to take the mirror or R to return.", 
+					ReturnAction.Instance,
+					new Action(KeyCode.T, new State("You found a key attached to the back of the mirror!", "Press S to look at the sheets again, or L to try the key in the locker",
+						new Action(KeyCode.S, new State("There's nothing in the sheets.", "Press R to return.", ReturnAction.Instance)),
+						new Action(KeyCode.L, new State("Congratulations, you unlock thee door!", "Press O to open it, or R to return to your cell.",
+							ReturnAction.Instance, 
+							new Action(KeyCode.O, new State("You're free of the cell!")))
+						))
+					))
+				),
+				new Action(KeyCode.S, new State("There's nothing in the sheets.", "Press R to return.", ReturnAction.Instance)),
+				new Action(KeyCode.L, new State("This door is still locked.", "Press R to return.", ReturnAction.Instance)))
+		);
 		printCurrentState();
 	}
 
 	void printCurrentState() {
-		text.text = currentState.getDescription() + "\n" + currentState.getMovements();
+		text.text = stateMachine.Current.Description + "\n" + stateMachine.Current.Movements;
 		print("Started");
 	}
 	
 	// Update is called once per frame
 	void Update () {
-		foreach(KeyValuePair<KeyCode, State> entry in currentState.NextStates)
+		foreach(KeyValuePair<KeyCode, State> entry in stateMachine.Current.NextStates)
 		{
 			if (Input.GetKeyDown(entry.Key)) {
-				currentState = entry.Value;
+				stateMachine.Move(entry.Key);
 				printCurrentState();
+				break;
 			}
 		}
 	}
 }
 
-public abstract class State {
-	private readonly State source;
-	public State(State source) {
-		this.source = source;
+public class StateMachine {
+	private State root;
+	private State current;
+	public StateMachine(State root) {
+		this.root = root;
+		this.current = root;
 	}
-	public State() {
-		this.source = null;
+	public void Move(KeyCode key) {
+		State next = current.NextStates[key];
+		if (next.GetType() == typeof(ReturnState)) {
+			current = current.Source;
+		} else if (next != null) {
+			current = next;
+		}
 	}
+	public State Current {
+		get {
+			return current;
+		}
+	}
+}
+
+public class Action {
+	private KeyCode key;
+	private State state;
+	public KeyCode Key {
+		get {
+			return key;
+		} 
+	}
+	public State State {
+		get {
+			return state;
+		}
+	}
+
+	public Action(KeyCode key, State state) {
+		this.key = key;
+		this.state = state;
+	}
+}
+
+public sealed class ReturnAction : Action
+{
+	public static readonly Action Instance = new ReturnAction();
+    private ReturnAction() : base(KeyCode.R, ReturnState.Instance)
+    {
+    }
+}
+
+public class State {
     protected Dictionary<KeyCode, State> nextStates = new Dictionary<KeyCode, State>();
+	private string description;
+	private string movements;
+	private State source;
+	public State(string description, string movements, params Action[] stateKeys) {
+		this.description = description;
+		this.movements = movements;
+		foreach(Action sk in stateKeys) {
+			nextStates[sk.Key] = sk.State;
+			sk.State.source = this;
+		}
+	}
+	public State(string description) {
+		this.description = description;
+		this.movements = "";
+	}
 	public Dictionary<KeyCode, State> NextStates {
 		get {
 			return this.nextStates;
 		}
 	}
-    public abstract string getDescription();
-	public abstract string getMovements();
+	public string Description {
+		get {
+			return description;
+		}
+	}
+	public string Movements {
+		get {
+			return movements;
+		}
+	}
+	public State Source {
+		get {
+			return source;
+		}
+	}
 }
 
-public class CellState : State
+public sealed class ReturnState : State
 {
-	public CellState() {
-		this.nextStates[KeyCode.M] = new MirrorState(this);
-		this.nextStates[KeyCode.L] = new LockedState(this);
-		this.nextStates[KeyCode.S] = new SheetsState(this);
-	}
-    public override string getDescription()
+	public static readonly ReturnState Instance = new ReturnState();
+    private ReturnState() : base("")
     {
-        return "You are in a prision cell, and you need to escape. There are some dirty sheets on the bed, a mirror on the wall, and the door is locked from the outside.";
-    }
-
-    public override string getMovements()
-    {
-        return "Press S to view Sheets, M to view Mirror and L to view Lock.";
-    }
-}
-
-public class MirrorState : State
-{
-    public MirrorState(State source) : base(source){
-		this.nextStates[KeyCode.R] = source;
-	}
-    public override string getDescription()
-    {
-        return "This is a very simple mirror.";
-    }
-    public override string getMovements()
-    {
-        return "Press T to take the mirror or R to return.";
-    }
-}
-
-public class LockedState : State
-{
-    public LockedState(State source) : base(source){
-		this.nextStates[KeyCode.R] = source;
-	}
-    public override string getDescription()
-    {
-        return "This door is still locked.";
-    }
-    public override string getMovements()
-    {
-        return "Press R to return.";
-    }
-}
-
-public class SheetsState : State {
-	public SheetsState(State source): base(source) {
-		this.nextStates[KeyCode.R] = source;
-	}
-    public override string getDescription()
-    {
-        return "There's nothing in the sheets.";
-    }
-    public override string getMovements()
-    {
-        return "Press R to return.";
     }
 }
